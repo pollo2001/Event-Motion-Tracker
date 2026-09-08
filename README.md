@@ -1,7 +1,7 @@
 # Event-Motion-Tracker
 
 ## Description:
-Event-based motion tracking in OpenCL using the RB3.
+GPU-accelerated event-based vision pipeline in OpenCL inspired by Dynamic Vision Sensors. The pipeline converts standard camera frames into asynchronous temporal brightness change events, accumulates them into decaying event surfaces, and tracks relatively high-speed motion centroids/events.
 
 ## Project Structure
 
