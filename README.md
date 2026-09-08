@@ -18,7 +18,7 @@ rb3-event-motion-tracker/
         └── main.c
 ```
 
-##Layer Structure
+## Layer Structure
 ```
 [Raw Camera Frame]
        │
