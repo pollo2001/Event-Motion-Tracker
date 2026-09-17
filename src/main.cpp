@@ -49,8 +49,6 @@ Mat previous_gray;
 
 void OpenCLEventTracker(int frame_counter, int width, int height, const vector<int8_t>& event_map_idx)
 {
-   
-
     const int event_map_entries = height * width;
     int on_count = 0;
     int off_count = 0;
@@ -73,6 +71,8 @@ cout << "ON: " << on_count
 
 Mat event_image(height, width, CV_8UC1);
 
+// test to see how many pixels are on/off for events
+
 for (int i = 0; i < event_map_entries; i++)
 {
     if (event_map_idx[i] == 1)
@@ -91,26 +91,26 @@ if (frame_counter == 20)
     cout << "Saved middle frame debug image" << endl;
 }
 
-    //@@ Free the GPU memory here
-    /*clReleaseMemObject(device_current_f);
-    clReleaseMemObject(device_previous_f);
-    clReleaseMemObject(device_event_map);
-    clReleaseMemObject(device_surface);
-    clReleaseMemObject(device_output_surface);
-    clReleaseProgram(program);
-    clReleaseKernel(kernel1);
-    clReleaseKernel(kernel2);
-    clReleaseKernel(kernel3);*/
-
-
 }
 
 
 int main() {
 
-    VideoCapture cap("video/Video.mov"); // find video
+    VideoCapture cap("video/Video.mov"); // input video
+
+    int frame_width = static_cast<int>(cap.get(CAP_PROP_FRAME_WIDTH));
+    int frame_height = static_cast<int>(cap.get(CAP_PROP_FRAME_HEIGHT));
+    double fps = cap.get(CAP_PROP_FPS);
+    Size frame_size(frame_width, frame_height);
+    int vid_ext = VideoWriter::fourcc('m', 'p', '4', 'v');
+    string file_name = "video_out.mp4";
+    string file_name2 = "event_out.mp4";
+
+    VideoWriter vid(file_name, vid_ext, fps, frame_size, true); // centroid output
+    VideoWriter vid2(file_name2, vid_ext, fps, frame_size, false); // event output
 
     int frame_counter = 0;
+
 
     if (!cap.isOpened()) {
         std::cerr << "Error: could not open video\n";
@@ -132,7 +132,7 @@ int main() {
    int event_map_entries = height * width;
 
 
-         // Load external OpenCL kernel code
+    // Load external OpenCL kernel code
     char *kernel_source = OclLoadKernel(KERNEL_PATH); // Load kernel source
 
     // Device input and output buffers
@@ -140,7 +140,6 @@ int main() {
     cl_mem device_surface, device_output_surface;
 
     size_t global_item_size[2];
-    size_t local_item_size;
     cl_int err;
 
     cl_device_id device_id;    // device ID
@@ -156,22 +155,22 @@ int main() {
     const float noise_threshold = 40;
 
 
-    // Find platforms and devices
+    // Platforms and devices
     OclPlatformProp *platforms = NULL;
     cl_uint num_platforms;
 
     err = OclFindPlatforms((const OclPlatformProp **)&platforms, &num_platforms);
     CHECK_ERR(err, "OclFindPlatforms");
 
-    // Get the ID for the specified kind of device type.
+    // ID for the specified kind of device type.
     err = OclGetDeviceWithFallback(&device_id, OCL_DEVICE_TYPE);
     CHECK_ERR(err, "OclGetDeviceWithFallback");
 
-    // Create a context
+    // Context
     context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
     CHECK_ERR(err, "clCreateContext");
 
-    // Create a command queue
+    // Command queue
 # if __APPLE__
     queue = clCreateCommandQueue(context, device_id, 0, &err);
 #else
@@ -179,7 +178,7 @@ int main() {
 #endif
     CHECK_ERR(err, "clCreateCommandQueueWithProperties");
 
-    // Create the program from the source buffer
+    // Create program from the source buffer
     program = clCreateProgramWithSource(context, 1, (const char **)&kernel_source, NULL, &err);
     CHECK_ERR(err, "clCreateProgramWithSource");
 
@@ -187,7 +186,7 @@ int main() {
     err = clBuildProgram(program, 0, NULL, NULL, NULL, NULL);
     CHECK_ERR(err, "clBuildProgram");
 
-    // Create the compute kernel in the program we wish to run
+    // Computer kernels for the 3 layers
     kernel1 = clCreateKernel(program, "generate_events", &err);
     CHECK_ERR(err, "clCreateKernel");
     kernel2 = clCreateKernel(program, "generate_sae", &err);
@@ -195,7 +194,7 @@ int main() {
     kernel3 = clCreateKernel(program, "generate_boxFilter", &err);
     CHECK_ERR(err, "clCreateKernel");
 
-    //@@ Allocate GPU memory here
+    // Allocate GPU memory
     size_t size_a = height * width;
     size_t size_b = height * width;
     size_t size_c = height * width;
@@ -214,43 +213,26 @@ int main() {
     CHECK_ERR(err, "Initialize device_surface");
     device_output_surface = clCreateBuffer(context, CL_MEM_WRITE_ONLY, size_e * sizeof(float), NULL, &err );
     CHECK_ERR(err, "clCreateBuffer device_output_surface");
-    //@@ define local and global work sizes
+    // define global work sizes
     global_item_size[0] = height;
     global_item_size[1] = width;
-    local_item_size = 1;
 
     vector<int8_t> event_map_idx(event_map_entries);
-
 
     while (cap.read(frame)) {
     std::cout << "Read frame successfully\n";
 
     cvtColor(frame,frame_gray, COLOR_BGR2GRAY);
 
-    //@@ Copy memory to the GPU here
+    //Copy memory to the GPU here
     err = clEnqueueWriteBuffer(queue, device_current_f, CL_TRUE, 0, size_a* sizeof(uchar), frame_gray.data, 0, NULL, NULL);
     CHECK_ERR(err, "clEnqueueWriteBuffer device_current_f");
     err = clEnqueueWriteBuffer(queue, device_previous_f, CL_TRUE, 0, size_b* sizeof(uchar), previous_gray.data, 0, NULL, NULL);
     CHECK_ERR(err, "clEnqueueWriteBuffer device_previous_f");
 
     frame_counter++;
-    
-    /*imshow("Grayscale Video Feed",frame_gray);
 
-    char key = (char)waitKey(30);
-    if(key == 27 || key == 'q')
-    {
-        break;
-    }
-    cout << "Gray frame: "
-         << frame_gray.cols << "x"
-         << frame_gray.rows
-         << " channels="
-         << frame_gray.channels()
-         << endl;*/
-
-    // Call your function.
-    // Set the arguments to our compute kernel
+    // Layer 1 arguments
     err = clSetKernelArg(kernel1, 0, sizeof(cl_mem), &device_current_f);
     CHECK_ERR(err, "clSetKernelArg 0");
     err |= clSetKernelArg(kernel1, 1, sizeof(cl_mem), &device_previous_f);
@@ -264,15 +246,15 @@ int main() {
      err |= clSetKernelArg(kernel1, 5, sizeof(const int), &height);
     CHECK_ERR(err, "clSetKernelArg 5");
 
-    //@@ Launch the GPU Kernel here
+    //Launch the GPU Kernel
     err = clEnqueueNDRangeKernel(queue, kernel1, 2, NULL, global_item_size, NULL, 0, NULL, NULL);
     CHECK_ERR(err, "clEnqueueNDRangeKernel");
-    //@@ Copy the GPU memory back to the CPU here
+    //Copy the GPU memory back to the CPU here
     err = clEnqueueReadBuffer(queue, device_event_map, CL_TRUE, 0, size_c* sizeof(char), event_map_idx.data(), 0, NULL, NULL);
     CHECK_ERR(err, "clEnqueueReadBuffer");
     OpenCLEventTracker(frame_counter,width,height,event_map_idx);
 
-     // Set the arguments to our compute kernel
+     // Layer 2 arguments
     err = clSetKernelArg(kernel2, 0, sizeof(cl_mem), &device_event_map);
     CHECK_ERR(err, "clSetKernelArg 0");
     err |= clSetKernelArg(kernel2, 1, sizeof(cl_mem), &device_surface);
@@ -284,16 +266,17 @@ int main() {
     err |= clSetKernelArg(kernel2, 4, sizeof(const int), &height);
     CHECK_ERR(err, "clSetKernelArg 4");
 
-    //@@ Launch the GPU Kernel here
+    //Launch the GPU Kernel here
     err = clEnqueueNDRangeKernel(queue, kernel2, 2, NULL, global_item_size, NULL, 0, NULL, NULL);
     CHECK_ERR(err, "clEnqueueNDRangeKernel");
-    //@@ Copy the GPU memory back to the CPU here
+    //Copy the GPU memory back to the CPU here
     err = clEnqueueReadBuffer(queue, device_surface, CL_TRUE, 0, size_d* sizeof(float), initial_surface.data(), 0, NULL, NULL);
     CHECK_ERR(err, "clEnqueueReadBuffer");
 
+    // create layer 2 png
     if (frame_counter == 20)
 {
-    Mat surface_image(height, width, CV_8UC1);
+    Mat surface_image2(height, width, CV_8UC1);
 
     for (int i = 0; i < event_map_entries; i++)
     {
@@ -305,14 +288,14 @@ int main() {
         if (value > 255)
             value = 255;
 
-        surface_image.data[i] = (uchar)value;
+        surface_image2.data[i] = (uchar)value;
     }
 
-    imwrite("event_layer2.png", surface_image);
+    imwrite("event_layer2.png", surface_image2);
     cout << "Saved Layer 2 surface image" << endl;
 }
 
-     // Set the arguments to our compute kernel
+     //Layer 3 arguments
     err = clSetKernelArg(kernel3, 0, sizeof(cl_mem), &device_surface);
     CHECK_ERR(err, "clSetKernelArg 0");
     err |= clSetKernelArg(kernel3, 1, sizeof(cl_mem), &device_output_surface);
@@ -324,17 +307,15 @@ int main() {
     err |= clSetKernelArg(kernel3, 4, sizeof(const int), &height);
     CHECK_ERR(err, "clSetKernelArg 4");
 
-    //@@ Launch the GPU Kernel here
+    //Launch the GPU Kernel here
     err = clEnqueueNDRangeKernel(queue, kernel3, 2, NULL, global_item_size, NULL, 0, NULL, NULL);
     CHECK_ERR(err, "clEnqueueNDRangeKernel");
-    //@@ Copy the GPU memory back to the CPU here
+    //Copy the GPU memory back to the CPU here
     err = clEnqueueReadBuffer(queue, device_output_surface, CL_TRUE, 0, size_e* sizeof(float), initial_surface.data(), 0, NULL, NULL);
     CHECK_ERR(err, "clEnqueueReadBuffer");
 
-    if (frame_counter == 20)
-{
     Mat surface_image(height, width, CV_8UC1);
-
+    // create surface image for layer 3 and used to write for event_video
     for (int i = 0; i < event_map_entries; i++)
     {
         float value = initial_surface[i];
@@ -348,23 +329,24 @@ int main() {
         surface_image.data[i] = (uchar)value;
     }
 
+
+    if (frame_counter == 20)
+{
     imwrite("event_layer3.png", surface_image);
     cout << "Saved Layer 3 surface image" << endl;
 }
-//      cx = sum(x * intensity) / sum(intensity)
-//      cy = sum(y * intensity) / sum(intensity)
-
-    float weighted_x = 0.0;
-    float weighted_y = 0.0;
-    float total_weight = 0.0;
-
+// Centroid calculation
+    double weighted_x = 0.0;
+    double weighted_y = 0.0;
+    double total_weight = 0.0;
+    
 for (int row = 0; row < height; row++)
 {
     for (int col = 0; col < width; col++)
     {
         int idx = row * width + col;
         float intensity = initial_surface[idx];
-        if (row < height * 0.75 && col > width * 0.45 && intensity > 50){
+        if (row < height * 0.95 && col > width * 0.05 && intensity > 20){
 
         weighted_x += col * intensity;
         weighted_y += row * intensity;
@@ -377,23 +359,24 @@ if(total_weight > 0)
     float cx = weighted_x/total_weight;
     float cy = weighted_y/total_weight;
 
-    circle(frame,Point(cx, cy),10,Scalar(0, 0, 255), 2);
+    circle(frame,Point(cx, cy),50,Scalar(0, 0, 255), 2);
 
-    cout << "Centroid: (" << cx << ", " << cy << ")" << endl;
+    cout << "Centroid: (" << cx << ", " << cy << ")" << endl; //print centroid values
 
+    // centroid png
     if(frame_counter == 20 && total_weight > 0)
 {
     imwrite("centroid_debug.png", frame);
 }
-
 }
-
-
+    vid.write(frame);
+    vid2.write(surface_image);
     previous_gray = frame_gray.clone(); // make sure previous frame is set after processing
 }
+// test to see fps, frame count, duration
 
     cout << "FPS: "
-          << cap.get(cv::CAP_PROP_FPS)
+          << fps
           << "\n";
 
     cout << "Frame count: "
@@ -404,10 +387,9 @@ if(total_weight > 0)
             << cap.get(cv::CAP_PROP_FRAME_COUNT) /
                 cap.get(cv::CAP_PROP_FPS)
             << " seconds\n";
-
+    vid.release();
+    vid2.release();
     cap.release();
-
-    // Allocate the memory for the target.
 
     // Release host memory
     clReleaseMemObject(device_current_f);
