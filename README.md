@@ -4,7 +4,7 @@
 A GPU-accelerated event-based vision pipeline in OpenCL inspired by Dynamic Vision Sensors. The pipeline converts standard camera frames into asynchronous temporal brightness change events, accumulates them into decaying event surfaces, and tracks relatively high-speed motion centroids/events.
 
 ## Programming Environment:
-THis repository should have everything needed to run the project, there is a change to the .devcontainer/gpu-adreno folder to include a Dockerfile and edits to the devcontainer.json file to allow OpenCV to work on the RB3. The output videos and images are stored on a separate output folder only on GitHub for organization purposes. When running the program it will be stored in the root of the directory.
+This repository should have everything needed to run the project, there is a change to the .devcontainer/gpu-adreno folder to include a Dockerfile and edits to the devcontainer.json file to allow OpenCV to work on the RB3. The output videos and images are stored on a separate output folder only on GitHub for organization purposes. When running the program it will be stored in the root of the directory.
 
 ## GitHub Structure
 
